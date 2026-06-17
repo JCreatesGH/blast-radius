@@ -17,14 +17,25 @@ npm install blast-radius
 ## Use it
 
 ```ts
-import { buildGraph, blastRadius, roots, findCycle, toDot } from "blast-radius";
+import { buildGraph, blastRadius, roots, findCycle, unreachable, toDot } from "blast-radius";
 
 const graph = buildGraph(fileContents);          // { "src/a.ts": "<source>", ... }
 
 blastRadius(graph, ["src/utils/format.ts"]);     // every file that imports it, transitively
+unreachable(graph, ["src/index.ts"]);            // dead code: files no entrypoint reaches
 roots(graph);                                    // files nothing imports (entrypoints / dead code)
 findCycle(graph);                                // a circular-import path, or null
 toDot(graph, blastRadius(graph, changed));       // Graphviz with affected nodes highlighted
+```
+
+## CLI
+
+Installing the package adds a `blast-radius` command that walks a real project (exits 1 on a cycle):
+
+```bash
+$ blast-radius src --changed "$(git diff --name-only | paste -sd, -)"
+$ blast-radius src --entry src/index.ts          # report dead (unreachable) files
+$ blast-radius src --json                        # machine-readable report
 ```
 
 ## How it works
@@ -39,7 +50,7 @@ Everything works on an in-memory `{path: source}` map, so it's fully unit-tested
 ## Development
 
 ```bash
-npm install && npm test    # 8 tests
+npm install && npm test    # 12 tests
 npm run build              # tsc, clean
 ```
 
