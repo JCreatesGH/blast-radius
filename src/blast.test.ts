@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildGraph } from "./graph";
-import { blastRadius, roots, findCycle, reachable, unreachable } from "./blast";
+import { blastRadius, roots, findCycle, reachable, unreachable, hotspots } from "./blast";
 import { extractImports } from "./imports";
 import { analyze } from "./cli";
 
@@ -71,13 +71,31 @@ describe("reachable + unreachable (dead code)", () => {
   });
 });
 
+describe("hotspots", () => {
+  const g = buildGraph(project);
+
+  it("ranks files by how much changing them would affect", () => {
+    const hs = hotspots(g);
+    // format.ts is imported (transitively) by everything -> highest impact
+    expect(hs[0].file).toBe("src/utils/format.ts");
+    expect(hs[0].impact).toBe(4);                 // models/user, api/users, api/index, app
+    // the root entrypoint affects nothing
+    expect(hs.find((h) => h.file === "src/app.ts")!.impact).toBe(0);
+  });
+
+  it("honors the top-N cap", () => {
+    expect(hotspots(g, 2)).toHaveLength(2);
+  });
+});
+
 describe("analyze", () => {
-  it("bundles file count, roots, cycle, blast radius, and dead code", () => {
+  it("bundles file count, roots, cycle, hotspots, blast radius, and dead code", () => {
     const r = analyze({ ...project, "src/orphan.ts": `export const z = 0;` },
       { changed: ["src/utils/format.ts"], entry: ["src/app.ts"] });
     expect(r.files).toBe(6);
     expect(r.roots).toContain("src/app.ts");
     expect(r.cycle).toBeNull();
+    expect(r.hotspots[0].file).toBe("src/utils/format.ts");
     expect(r.blastRadius).toContain("src/models/user.ts");
     expect(r.deadCode).toEqual(["src/orphan.ts"]);
   });

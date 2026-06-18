@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 import { buildGraph } from "./graph.js";
-import { blastRadius, roots, findCycle, unreachable } from "./blast.js";
+import { blastRadius, roots, findCycle, unreachable, hotspots, Hotspot } from "./blast.js";
 
 const HELP = `blast-radius — import-graph impact analysis for a JS/TS project
 
 Usage:
-  blast-radius <dir> [--changed a.ts,b.ts] [--entry src/index.ts] [--json]
+  blast-radius <dir> [--changed a.ts,b.ts] [--entry src/index.ts] [--hotspots N] [--json]
 
-  --changed   files that changed → report everything they transitively affect
-  --entry     entrypoint(s) → report unreachable (dead) files
-  --json      machine-readable output`;
+  --changed    files that changed → report everything they transitively affect
+  --entry      entrypoint(s) → report unreachable (dead) files
+  --hotspots N show the N most impactful files to change (default 10)
+  --json       machine-readable output`;
 
 const EXTS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 const IGNORE_DIRS = new Set(["node_modules", "dist", "build", ".git", ".next", "coverage"]);
@@ -18,6 +19,7 @@ export interface Report {
   files: number;
   roots: string[];
   cycle: string[] | null;
+  hotspots: Hotspot[];
   blastRadius?: string[];
   deadCode?: string[];
 }
@@ -25,13 +27,14 @@ export interface Report {
 /** Pure analysis over an in-memory {path: source} map. */
 export function analyze(
   fileContents: Record<string, string>,
-  opts: { changed?: string[]; entry?: string[] } = {},
+  opts: { changed?: string[]; entry?: string[]; hotspots?: number } = {},
 ): Report {
   const graph = buildGraph(fileContents);
   const report: Report = {
     files: graph.files.length,
     roots: roots(graph),
     cycle: findCycle(graph),
+    hotspots: hotspots(graph, opts.hotspots ?? 10),
   };
   if (opts.changed && opts.changed.length) report.blastRadius = blastRadius(graph, opts.changed);
   if (opts.entry && opts.entry.length) report.deadCode = unreachable(graph, opts.entry);
@@ -47,6 +50,11 @@ function format(r: Report): string {
   const lines = [`${r.files} files analyzed`, `roots (unimported): ${r.roots.length}`];
   for (const f of r.roots) lines.push(`  • ${f}`);
   lines.push(r.cycle ? `circular import: ${r.cycle.join(" → ")}` : "no circular imports");
+  const hot = r.hotspots.filter((h) => h.impact > 0);
+  if (hot.length) {
+    lines.push(`\nhotspots (most impactful to change):`);
+    for (const h of hot) lines.push(`  • ${h.file} → ${h.impact} affected`);
+  }
   if (r.blastRadius) {
     lines.push(`\nblast radius (${r.blastRadius.length} affected):`);
     for (const f of r.blastRadius) lines.push(`  • ${f}`);
@@ -81,7 +89,11 @@ if (process.argv[1] && /cli\.js$/.test(process.argv[1])) {
       }
     };
     walk(dir);
-    const report = analyze(contents, { changed: csv(args, "--changed"), entry: csv(args, "--entry") });
+    const hsIdx = args.indexOf("--hotspots");
+    const hsN = hsIdx >= 0 ? (parseInt(args[hsIdx + 1], 10) || 10) : undefined;
+    const report = analyze(contents, {
+      changed: csv(args, "--changed"), entry: csv(args, "--entry"), hotspots: hsN,
+    });
     console.log(args.includes("--json") ? JSON.stringify(report, null, 2) : format(report));
     process.exit(report.cycle ? 1 : 0);
   });

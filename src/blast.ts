@@ -22,6 +22,18 @@ export function roots(graph: DepGraph): string[] {
   return graph.files.filter((f) => (graph.importedBy.get(f)?.size ?? 0) === 0).sort();
 }
 
+export interface Hotspot { file: string; impact: number; }
+
+/** Every file ranked by its blast radius — how many other files a change to it
+ * would transitively affect. The high-impact files are the architectural hubs to
+ * change with care (and to cover well with tests). */
+export function hotspots(graph: DepGraph, top?: number): Hotspot[] {
+  const ranked: Hotspot[] = graph.files
+    .map((file) => ({ file, impact: blastRadius(graph, [file]).length }))
+    .sort((a, b) => b.impact - a.impact || a.file.localeCompare(b.file));
+  return top != null ? ranked.slice(0, top) : ranked;
+}
+
 /** Everything `start` transitively imports (forward closure, excluding `start`). */
 export function reachable(graph: DepGraph, start: string[]): string[] {
   const seen = new Set<string>();
