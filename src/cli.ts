@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { buildGraph } from "./graph.js";
-import { blastRadius, roots, findCycle, unreachable, hotspots, Hotspot } from "./blast.js";
+import { blastRadius, affectedTests, roots, findCycle, unreachable, hotspots, Hotspot } from "./blast.js";
 
 const HELP = `blast-radius — import-graph impact analysis for a JS/TS project
 
 Usage:
   blast-radius <dir> [--changed a.ts,b.ts] [--entry src/index.ts] [--hotspots N] [--json]
 
-  --changed    files that changed → report everything they transitively affect
+  --changed    files that changed → report everything they transitively affect (and the tests to run)
   --entry      entrypoint(s) → report unreachable (dead) files
   --hotspots N show the N most impactful files to change (default 10)
   --json       machine-readable output`;
@@ -21,6 +21,7 @@ export interface Report {
   cycle: string[] | null;
   hotspots: Hotspot[];
   blastRadius?: string[];
+  affectedTests?: string[];
   deadCode?: string[];
 }
 
@@ -36,7 +37,10 @@ export function analyze(
     cycle: findCycle(graph),
     hotspots: hotspots(graph, opts.hotspots ?? 10),
   };
-  if (opts.changed && opts.changed.length) report.blastRadius = blastRadius(graph, opts.changed);
+  if (opts.changed && opts.changed.length) {
+    report.blastRadius = blastRadius(graph, opts.changed);
+    report.affectedTests = affectedTests(graph, opts.changed);
+  }
   if (opts.entry && opts.entry.length) report.deadCode = unreachable(graph, opts.entry);
   return report;
 }
@@ -58,6 +62,10 @@ function format(r: Report): string {
   if (r.blastRadius) {
     lines.push(`\nblast radius (${r.blastRadius.length} affected):`);
     for (const f of r.blastRadius) lines.push(`  • ${f}`);
+  }
+  if (r.affectedTests) {
+    lines.push(`\naffected tests (${r.affectedTests.length} to run):`);
+    for (const f of r.affectedTests) lines.push(`  • ${f}`);
   }
   if (r.deadCode) {
     lines.push(`\ndead code (${r.deadCode.length} unreachable):`);

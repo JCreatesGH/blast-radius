@@ -1,7 +1,7 @@
 {
   "name": "blast-radius",
-  "version": "0.2.0",
-  "description": "Compute the dependency blast radius of a code change in a JS/TS project, rank change hotspots, and detect cycles and dead code.",
+  "version": "0.3.0",
+  "description": "Compute the dependency blast radius of a code change in a JS/TS project, select affected tests, rank change hotspots, and detect cycles and dead code.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

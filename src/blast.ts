@@ -17,6 +17,20 @@ export function blastRadius(graph: DepGraph, changed: string[]): string[] {
   return [...affected].sort();
 }
 
+// Common test-file conventions: `*.test.ts` / `*.spec.js`, and `__tests__/`, `test/`, `tests/`.
+export const DEFAULT_TEST_RE = /(\.(test|spec)\.[cm]?[jt]sx?$)|(^|\/)(__tests__|tests?)\//;
+
+/** Test-impact analysis: the test files that could be affected by `changed` — every
+ * test within the blast radius, plus any changed file that is itself a test. Run just
+ * these in CI instead of the whole suite. `pattern` overrides what counts as a test. */
+export function affectedTests(graph: DepGraph, changed: string[],
+                              pattern: RegExp = DEFAULT_TEST_RE): string[] {
+  const isTest = (f: string) => pattern.test(f);
+  const candidates = new Set<string>(blastRadius(graph, changed));
+  for (const c of changed) if (isTest(c)) candidates.add(c);   // a changed test runs too
+  return [...candidates].filter(isTest).sort();
+}
+
 /** Files that nothing imports — candidate entrypoints or dead code. */
 export function roots(graph: DepGraph): string[] {
   return graph.files.filter((f) => (graph.importedBy.get(f)?.size ?? 0) === 0).sort();

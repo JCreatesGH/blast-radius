@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildGraph } from "./graph";
-import { blastRadius, roots, findCycle, reachable, unreachable, hotspots } from "./blast";
+import { blastRadius, affectedTests, roots, findCycle, reachable, unreachable, hotspots } from "./blast";
 import { extractImports } from "./imports";
 import { analyze } from "./cli";
 
@@ -98,6 +98,37 @@ describe("analyze", () => {
     expect(r.hotspots[0].file).toBe("src/utils/format.ts");
     expect(r.blastRadius).toContain("src/models/user.ts");
     expect(r.deadCode).toEqual(["src/orphan.ts"]);
+  });
+});
+
+describe("affectedTests (test-impact analysis)", () => {
+  const withTests = {
+    "src/utils/format.ts": `export const f = 1;`,
+    "src/models/user.ts": `import { f } from "../utils/format";`,
+    "src/utils/format.test.ts": `import { f } from "./format";`,
+    "src/models/user.spec.ts": `import "../models/user";`,
+    "src/__tests__/smoke.ts": `import "../models/user";`,
+    "src/unrelated.test.ts": `export {};`,        // imports nothing under change
+  };
+  const g = buildGraph(withTests);
+
+  it("returns the tests transitively affected by a change", () => {
+    const tests = affectedTests(g, ["src/utils/format.ts"]);
+    // format.test (direct), user.spec + __tests__/smoke (via user.ts) are all downstream
+    expect(tests).toEqual([
+      "src/__tests__/smoke.ts", "src/models/user.spec.ts", "src/utils/format.test.ts",
+    ]);
+    expect(tests).not.toContain("src/unrelated.test.ts");   // not in the blast radius
+  });
+
+  it("includes a changed file that is itself a test", () => {
+    expect(affectedTests(g, ["src/unrelated.test.ts"])).toEqual(["src/unrelated.test.ts"]);
+  });
+
+  it("analyze() surfaces affectedTests alongside the blast radius", () => {
+    const r = analyze(withTests, { changed: ["src/utils/format.ts"] });
+    expect(r.affectedTests).toContain("src/utils/format.test.ts");
+    expect(r.affectedTests).toContain("src/models/user.spec.ts");
   });
 });
 
